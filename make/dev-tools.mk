@@ -114,18 +114,3 @@ install-all: install-oh-my-posh install-dev-tools
 .PHONY: install-brew install-k9s install-ctop install-glances install-jq install-yq \
 	install-ranger install-gh install-container-tools install-monitoring-tools \
 	install-json-tools install-dev-tools install-oh-my-posh install-all
-
-# Then in your project's Makefile:
-# Makefile
-
-# Include the centralized dev tools
-DEVTOOLS_REPO ?= https://raw.githubusercontent.com/your-username/your-repo/main
-DEVTOOLS_PATH ?= $(shell pwd)/.make
-
-$(DEVTOOLS_PATH)/dev-tools.mk:
-	@mkdir -p $(DEVTOOLS_PATH)
-	@curl -s -o $@ $(DEVTOOLS_REPO)/dev-tools.mk
-
--include $(DEVTOOLS_PATH)/dev-tools.mk
-
-# Your existing Makefile targets continue below...
