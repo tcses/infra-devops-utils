@@ -1,4 +1,4 @@
-# dev-tools.mk
+# https://github.com/tcses/infra-devops-utils/edit/main/make/dev-tools.mk
 
 # Detect OS
 OS := $(shell cat /etc/os-release | grep ^ID= | cut -d= -f2 | tr -d '"')
