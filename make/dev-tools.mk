@@ -1,4 +1,3 @@
-# In your central repo, create a dev-tools.mk file:
 # dev-tools.mk
 
 # Detect OS
@@ -8,7 +7,8 @@ OS := $(shell cat /etc/os-release | grep ^ID= | cut -d= -f2 | tr -d '"')
 POSH_THEME ?= jandedobbeleer
 
 # Homebrew installation
-define install_brew
+.ONESHELL:
+install-brew:
 	@if ! . ~/.bashrc && command -v brew >/dev/null 2>&1; then \
 		echo "Installing Homebrew and dependencies..."; \
 		if [ "$(OS)" = "debian" ]; then \
@@ -28,7 +28,6 @@ define install_brew
 		export PATH="/home/linuxbrew/.linuxbrew/bin:$$PATH"; \
 		eval "$$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"; \
 	fi
-endef
 
 # Helper function to install or upgrade a package
 define brew_install_or_upgrade
