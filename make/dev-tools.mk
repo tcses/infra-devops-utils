@@ -1,4 +1,4 @@
-# https://github.com/tcses/infra-devops-utils/edit/main/make/dev-tools.mk
+# dev-tools.mk
 
 # Detect OS
 OS := $(shell cat /etc/os-release | grep ^ID= | cut -d= -f2 | tr -d '"')
@@ -6,10 +6,16 @@ OS := $(shell cat /etc/os-release | grep ^ID= | cut -d= -f2 | tr -d '"')
 # Default theme for Oh My Posh
 POSH_THEME ?= jandedobbeleer
 
+# Force all targets to always run
+.PHONY: install-brew install-k9s install-ctop install-glances install-jq install-yq \
+	install-ranger install-gh install-container-tools install-monitoring-tools \
+	install-json-tools install-dev-tools install-oh-my-posh install-all
+
 # Homebrew installation
 .ONESHELL:
 install-brew:
-	@if ! . ~/.bashrc && command -v brew >/dev/null 2>&1; then \
+	@echo "Checking Homebrew installation..."
+	@if ! command -v brew >/dev/null 2>&1; then \
 		echo "Installing Homebrew and dependencies..."; \
 		if [ "$(OS)" = "debian" ]; then \
 			sudo apt-get update && \
@@ -109,7 +115,3 @@ install-oh-my-posh: install-brew
 # Install everything
 install-all: install-oh-my-posh install-dev-tools
 	@echo "All tools installation complete!"
-
-.PHONY: install-brew install-k9s install-ctop install-glances install-jq install-yq \
-	install-ranger install-gh install-container-tools install-monitoring-tools \
-	install-json-tools install-dev-tools install-oh-my-posh install-all
