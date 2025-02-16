@@ -1,0 +1,19 @@
+systemd:
+	@echo "Creating and enabling PowerTOP systemd service..."
+	@sudo tee /etc/systemd/system/powertop-tuning.service > /dev/null << EOF
+[Unit]
+Description=PowerTOP tunings
+
+[Service]
+Type=oneshot
+Environment=TERM=dumb
+ExecStart=/usr/sbin/powertop --auto-tune
+RemainAfterExit=yes
+StandardOutput=null
+
+[Install]
+WantedBy=multi-user.target
+EOF
+	sudo systemctl daemon-reload
+	sudo systemctl enable powertop-tuning.service || true
+	sudo systemctl restart powertop-tuning.service || true
