@@ -82,8 +82,9 @@ disk:
 systemd:
 	@echo "Creating and enabling PowerTOP systemd service..."
 	@sudo cp powertop-tuning.service /etc/systemd/system/
-	sudo systemctl enable powertop-tuning.service
-	sudo systemctl start powertop-tuning.service
+	sudo systemctl daemon-reload
+	sudo systemctl enable powertop-tuning.service || true
+	sudo systemctl restart powertop-tuning.service || true
 
 clean:
 	@echo "Performing complete cleanup of all power management settings..."

@@ -1,12 +1,10 @@
-systemd:
-	@echo "Creating and enabling PowerTOP systemd service..."
-	@sudo tee /etc/systemd/system/powertop-tuning.service > /dev/null << EOF
 [Unit]
 Description=PowerTOP tunings
+After=multi-user.target
 
 [Service]
 Type=oneshot
-Environment=TERM=dumb
+Environment="TERM=dumb"
 ExecStart=/usr/sbin/powertop --auto-tune
 RemainAfterExit=yes
 StandardOutput=null
