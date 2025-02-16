@@ -29,35 +29,36 @@ install-fira-font:
 # Configure VSCode settings
 configure-vscode:
 	@echo "Configuring VSCode settings..."
-	@mkdir -p $(HOME)/.config/Code/User
-	@if [ ! -f "$(HOME)/.config/Code/User/settings.json" ]; then \
-		echo '{"terminal.integrated.fontFamily": "Hack Nerd Font Mono","editor.fontFamily": "\"Fira Code\", \"Droid Sans Mono\", monospace","editor.fontSize": 14,"editor.fontLigatures": true,"terminal.integrated.fontSize": 14}' > "$(HOME)/.config/Code/User/settings.json"; \
+	@mkdir -p "$(HOME)/.config/Code/User"
+	@if [ -f "$(HOME)/.config/Code/User/settings.json" ]; then \
+		echo "Creating backup of existing VSCode settings..."; \
+		cp "$(HOME)/.config/Code/User/settings.json" "$(HOME)/.config/Code/User/settings.json.backup-$$(date +%Y%m%d-%H%M%S)"; \
+		echo "Backup created successfully!"; \
+		if command -v jq >/dev/null 2>&1; then \
+			TEMP_FILE=$$(mktemp); \
+			cat "$(HOME)/.config/Code/User/settings.json" | \
+			jq --arg font "'Hack Nerd Font Mono'" \
+			   --arg editor_font "'Fira Code', 'Droid Sans Mono', monospace" \
+			   '. * { 
+				"terminal.integrated.fontFamily": $$font,
+				"editor.fontFamily": $$editor_font,
+				"editor.fontSize": 14,
+				"editor.fontLigatures": true,
+				"terminal.integrated.fontSize": 14
+			   }' > $$TEMP_FILE && \
+			mv $$TEMP_FILE "$(HOME)/.config/Code/User/settings.json"; \
+		else \
+			echo "Error: jq is required for safe JSON manipulation. Please install jq first."; \
+			exit 1; \
+		fi; \
 	else \
-		if ! grep -q "terminal.integrated.fontFamily" "$(HOME)/.config/Code/User/settings.json"; then \
-			sed -i '1s/{/{\"terminal.integrated.fontFamily\": \"Hack Nerd Font Mono\",/' "$(HOME)/.config/Code/User/settings.json"; \
-		else \
-			sed -i 's/"terminal.integrated.fontFamily":[^,]*/"terminal.integrated.fontFamily": "Hack Nerd Font Mono"/g' "$(HOME)/.config/Code/User/settings.json"; \
-		fi; \
-		if ! grep -q "editor.fontFamily" "$(HOME)/.config/Code/User/settings.json"; then \
-			sed -i '1s/{/{\"editor.fontFamily\": \"\\\"Fira Code\\\", \\\"Droid Sans Mono\\\", monospace\",/' "$(HOME)/.config/Code/User/settings.json"; \
-		else \
-			sed -i 's/"editor.fontFamily":[^,]*/"editor.fontFamily": "\"Fira Code\", \"Droid Sans Mono\", monospace"/g' "$(HOME)/.config/Code/User/settings.json"; \
-		fi; \
-		if ! grep -q "editor.fontSize" "$(HOME)/.config/Code/User/settings.json"; then \
-			sed -i '1s/{/{\"editor.fontSize\": 14,/' "$(HOME)/.config/Code/User/settings.json"; \
-		else \
-			sed -i 's/"editor.fontSize":[^,]*/"editor.fontSize": 14/g' "$(HOME)/.config/Code/User/settings.json"; \
-		fi; \
-		if ! grep -q "editor.fontLigatures" "$(HOME)/.config/Code/User/settings.json"; then \
-			sed -i '1s/{/{\"editor.fontLigatures\": true,/' "$(HOME)/.config/Code/User/settings.json"; \
-		else \
-			sed -i 's/"editor.fontLigatures":[^,]*/"editor.fontLigatures": true/g' "$(HOME)/.config/Code/User/settings.json"; \
-		fi; \
-		if ! grep -q "terminal.integrated.fontSize" "$(HOME)/.config/Code/User/settings.json"; then \
-			sed -i '1s/{/{\"terminal.integrated.fontSize\": 14,/' "$(HOME)/.config/Code/User/settings.json"; \
-		else \
-			sed -i 's/"terminal.integrated.fontSize":[^,]*/"terminal.integrated.fontSize": 14/g' "$(HOME)/.config/Code/User/settings.json"; \
-		fi \
+		echo '{ \
+			"terminal.integrated.fontFamily": "'\''Hack Nerd Font Mono'\''", \
+			"editor.fontFamily": "'\''Fira Code'\'', '\''Droid Sans Mono'\'', monospace", \
+			"editor.fontSize": 14, \
+			"editor.fontLigatures": true, \
+			"terminal.integrated.fontSize": 14 \
+		}' | jq '.' > "$(HOME)/.config/Code/User/settings.json"; \
 	fi
 	@echo "VSCode settings configured successfully!"
 
@@ -67,8 +68,8 @@ configure-gnome-terminal:
 	@PROFILE_ID=$$(gsettings get org.gnome.Terminal.ProfilesList default | tr -d "'"); \
 	if [ -n "$$PROFILE_ID" ]; then \
 		CURRENT_FONT=$$(gsettings get org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:$$PROFILE_ID/ font); \
-		if [ "$$CURRENT_FONT" != "'Hack Nerd Font Mono 12'" ]; then \
-			gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:$$PROFILE_ID/ font 'Hack Nerd Font Mono 12'; \
+		if [ "$$CURRENT_FONT" != "'Hack Nerd Font Mono 14'" ]; then \
+			gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:$$PROFILE_ID/ font 'Hack Nerd Font Mono 14'; \
 		fi; \
 		SYSTEM_FONT=$$(gsettings get org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:$$PROFILE_ID/ use-system-font); \
 		if [ "$$SYSTEM_FONT" != "false" ]; then \
