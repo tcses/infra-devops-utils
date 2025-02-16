@@ -82,26 +82,75 @@ systemd:
 	sudo systemctl start powertop-tuning.service
 
 clean:
-	@echo "Reverting power management settings..."
-	sudo systemctl stop powertop-tuning.service
-	sudo systemctl disable powertop-tuning.service
+	@echo "Performing complete cleanup of all power management settings..."
+	
+	# Stop and remove services
+	@echo "Removing services..."
+	sudo systemctl stop powertop-tuning.service || true
+	sudo systemctl disable powertop-tuning.service || true
 	sudo rm -f /etc/systemd/system/powertop-tuning.service
-	sudo rm -f /etc/modprobe.d/disable-lte.conf
-	sudo systemctl stop tlp
-	sudo systemctl disable tlp
-	sudo apt remove -y tlp
+	
+	# Remove TLP completely
+	@echo "Removing TLP..."
+	sudo systemctl stop tlp || true
+	sudo systemctl disable tlp || true
+	sudo apt purge -y tlp tlp-rdw || true
+	sudo apt autoremove -y
+	
+	# Reset PowerTOP settings
+	@echo "Resetting PowerTOP settings..."
+	@echo 500 | sudo tee /proc/sys/vm/dirty_writeback_centisecs || true
+	@echo 1 | sudo tee /proc/sys/kernel/nmi_watchdog || true
+	
+	# Reset USB power management
+	@echo "Resetting USB power management..."
+	@for device in /sys/bus/usb/devices/*; do \
+		[ -e "$device/power/control" ] && echo on | sudo tee "$device/power/control" || true; \
+	done
+	
+	# Reset PCI power management
+	@echo "Resetting PCI power management..."
+	@for device in /sys/bus/pci/devices/*; do \
+		[ -e "$device/power/control" ] && echo on | sudo tee "$device/power/control" || true; \
+	done
+	
+	# Reset disk power management
+	@echo "Resetting disk power management..."
+	@for disk in /sys/block/*/device/power/control; do \
+		[ -e "$disk" ] && echo on | sudo tee "$disk" || true; \
+	done
+	
+	# Reset CPU-specific settings
+	@echo "Resetting CPU-specific settings..."
 	@if [ -f /proc/cpuinfo ] && grep -qi "intel" /proc/cpuinfo; then \
 		if [ -d /sys/devices/system/cpu/intel_pstate ]; then \
-			echo 0 | sudo tee /sys/devices/system/cpu/intel_pstate/no_turbo; \
+			echo 0 | sudo tee /sys/devices/system/cpu/intel_pstate/no_turbo || true; \
+			echo "powersave" | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor || true; \
 		fi; \
 	elif [ -f /proc/cpuinfo ] && grep -qi "amd" /proc/cpuinfo; then \
 		if [ -d /sys/devices/system/cpu/cpufreq/policy0 ]; then \
 			for policy in /sys/devices/system/cpu/cpufreq/policy*; do \
-				echo "performance" | sudo tee $$policy/scaling_governor; \
+				echo "powersave" | sudo tee $policy/scaling_governor || true; \
 			done; \
 		fi; \
 		if [ -e /sys/devices/system/cpu/amd_pstate/status ]; then \
-			echo "passive" | sudo tee /sys/devices/system/cpu/amd_pstate/status; \
+			echo "passive" | sudo tee /sys/devices/system/cpu/amd_pstate/status || true; \
 		fi; \
 	fi
+	
+	# Remove configuration files
+	@echo "Removing configuration files..."
+	sudo rm -f /etc/modprobe.d/disable-lte.conf
+	sudo rm -f /etc/tlp.conf.bak
+	sudo rm -f /etc/tlp.d/*.conf
+	
+	# Clean package manager
+	@echo "Cleaning package manager..."
+	sudo apt clean
+	sudo apt autoremove -y
+	
+	# Update system
+	@echo "Updating initramfs..."
 	sudo update-initramfs -u
+	
+	@echo "Cleanup complete. You may want to reboot your system for all changes to take effect."
