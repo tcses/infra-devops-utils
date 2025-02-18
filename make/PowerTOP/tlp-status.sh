@@ -1,10 +1,10 @@
-tlp-status
+sudo tlp-status
 
 # set performance mode
-# tlp-performance
+# sudo tlp-performance
 
 # set battery-saving mode
-# tlp-battery
+# sudo tlp-battery
 
 # set balanced mode
-# tlp-balanced
+# sudo tlp-balanced
