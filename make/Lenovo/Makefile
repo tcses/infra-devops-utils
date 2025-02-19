@@ -17,6 +17,16 @@ deps: check
 		libdbus-glib-1-dev build-essential libcairo2-dev pkg-config \
 		python3-cairo-dev libgirepository1.0-dev gir1.2-gtk-3.0 cmake
 
+.PHONY: trackpoint-config
+
+trackpoint-config:
+	@echo "Configuring TrackPoint settings..."
+	@sudo mkdir -p /etc/udev/rules.d
+	@echo 'ACTION=="add", SUBSYSTEM=="input", ATTR{name}=="TPPS/2 IBM TrackPoint", ATTR{device/sensitivity}="275", ATTR{device/speed}="215"' | sudo tee /etc/udev/rules.d/10-trackpoint.rules > /dev/null
+	@sudo udevadm trigger
+	@echo "TrackPoint configuration complete. Please reboot for changes to take effect."
+
+
 # Clone and install using the official script
 install: deps
 	@if [ ! -d "throttled" ]; then \
