@@ -1,9 +1,68 @@
 #!/bin/bash
 
-# Create the directory if it doesn't exist
+echo "Installing and configuring ThinkPad X1 Carbon 6th Gen power management..."
+
+# Install required packages
+sudo apt-get update
+sudo apt-get install -y git python3-dev libdbus-glib-1-dev libgirepository1.0-dev libcairo2-dev tlp tlp-rdw msr-tools
+
+# Install throttled
+git clone https://github.com/erpalma/throttled.git
+cd throttled
+sudo ./install.sh
+
+# Configure throttled
+sudo tee /etc/throttled.conf << EOF
+[GENERAL]
+# Enable or disable the script execution
+Enabled: True
+# SYSFS path for checking if the system is running on AC power
+Sysfs_Power_Path: /sys/class/power_supply/AC/online
+
+[BATTERY]
+# Update the registers every this many seconds
+Update_Rate_s: 30
+# Max package power for time window #1
+PL1_Tdp_W: 29
+# Max package power for time window #2
+PL2_Tdp_W: 44
+# Max temperature before throttling
+Trip_Temp_C: 85
+# Set HWP energy performance hints to 'balance_power' on BAT
+HWP_Mode: balance_power
+# Set cTDP to normal=0, down=1 or up=2 (EXPERIMENTAL)
+cTDP: 0
+
+[AC]
+# Update the registers every this many seconds
+Update_Rate_s: 5
+# Max package power for time window #1
+PL1_Tdp_W: 44
+# Max package power for time window #2
+PL2_Tdp_W: 44
+# Max temperature before throttling
+Trip_Temp_C: 95
+# Set HWP energy performance hints to 'performance' on AC
+HWP_Mode: performance
+# Set cTDP to normal=0, down=1 or up=2 (EXPERIMENTAL)
+cTDP: 0
+
+[UNDERVOLT]
+# CPU core voltage offset (mV)
+CORE: -100
+# Integrated GPU voltage offset (mV)
+GPU: -85
+# CPU cache voltage offset (mV)
+CACHE: -100
+# System Agent voltage offset (mV)
+UNCORE: -85
+# Analog I/O voltage offset (mV)
+ANALOGIO: 0
+EOF
+
+# Create TLP configuration
 sudo mkdir -p /etc/tlp.d
 
-# Create your custom config with balanced AC defaults
 sudo tee /etc/tlp.d/99-custom-settings.conf << 'EOF'
 # ThinkPad X1 Carbon 6th Gen Intel i7 Configuration
 
@@ -11,25 +70,25 @@ sudo tee /etc/tlp.d/99-custom-settings.conf << 'EOF'
 CPU_SCALING_GOVERNOR_ON_AC=performance
 CPU_SCALING_GOVERNOR_ON_BAT=powersave
 
-# Platform Profiles - Both balanced by default
+# Platform Profiles
 PLATFORM_PROFILE_ON_AC=balanced
 PLATFORM_PROFILE_ON_BAT=balanced
 
-# Intel CPU Settings - More conservative AC settings
-CPU_MIN_PERF_ON_AC=0
-CPU_MAX_PERF_ON_AC=80
-CPU_MIN_PERF_ON_BAT=20
-CPU_MAX_PERF_ON_BAT=80
+# CPU Frequencies (i7-8550U: 400MHz - 4000MHz)
+CPU_SCALING_MIN_FREQ_ON_AC=400000
+CPU_SCALING_MAX_FREQ_ON_AC=4000000
+CPU_SCALING_MIN_FREQ_ON_BAT=400000
+CPU_SCALING_MAX_FREQ_ON_BAT=3200000
 
-# Hardware Power Management - Balanced for both
+# Hardware Power Management
 CPU_HWP_ON_AC=balance_performance
-CPU_HWP_ON_BAT=balance_performance
+CPU_HWP_ON_BAT=balance_power
 CPU_BOOST_ON_AC=1
 CPU_BOOST_ON_BAT=1
 
-# Energy Performance Preference - Balanced for both
+# Energy Performance Preference
 CPU_ENERGY_PERF_POLICY_ON_AC=balance_performance
-CPU_ENERGY_PERF_POLICY_ON_BAT=balance_performance
+CPU_ENERGY_PERF_POLICY_ON_BAT=balance_power
 
 # Intel GPU Settings
 INTEL_GPU_MIN_FREQ_ON_AC=300
@@ -44,103 +103,101 @@ START_CHARGE_THRESH_BAT0=60
 STOP_CHARGE_THRESH_BAT0=80
 EOF
 
-# Restart TLP to apply settings
-sudo tlp start
-
 # Create scripts directory
 sudo mkdir -p /usr/local/bin
 
-# Create a script to switch to performance mode
+# Create performance mode script
 sudo tee /usr/local/bin/tlp-performance << 'EOF'
 #!/bin/bash
 echo "Switching to performance mode..."
 
-# Set Intel P-state parameters
-echo 0 | sudo tee /sys/devices/system/cpu/intel_pstate/no_turbo
-echo 100 | sudo tee /sys/devices/system/cpu/intel_pstate/max_perf_pct
-echo 25 | sudo tee /sys/devices/system/cpu/intel_pstate/min_perf_pct
+# Set CPU frequency limits
+for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
+    echo 400000 | sudo tee $cpu/cpufreq/scaling_min_freq
+    echo 4000000 | sudo tee $cpu/cpufreq/scaling_max_freq
+done
 
-# Intel-specific performance settings
+# Enable Turbo Boost
+echo 0 | sudo tee /sys/devices/system/cpu/intel_pstate/no_turbo
+
+# Update TLP settings
 sudo sed -i 's/^CPU_HWP_ON_AC=.*/CPU_HWP_ON_AC=performance/' /etc/tlp.d/99-custom-settings.conf
 sudo sed -i 's/^CPU_ENERGY_PERF_POLICY_ON_AC=.*/CPU_ENERGY_PERF_POLICY_ON_AC=performance/' /etc/tlp.d/99-custom-settings.conf
-sudo sed -i 's/^CPU_BOOST_ON_AC=.*/CPU_BOOST_ON_AC=1/' /etc/tlp.d/99-custom-settings.conf
 sudo sed -i 's/^CPU_SCALING_GOVERNOR_ON_AC=.*/CPU_SCALING_GOVERNOR_ON_AC=performance/' /etc/tlp.d/99-custom-settings.conf
-
-# Common TLP performance settings
 sudo sed -i 's/^PLATFORM_PROFILE_ON_AC=.*/PLATFORM_PROFILE_ON_AC=performance/' /etc/tlp.d/99-custom-settings.conf
-sudo sed -i 's/^CPU_MAX_PERF_ON_AC=.*/CPU_MAX_PERF_ON_AC=100/' /etc/tlp.d/99-custom-settings.conf
 
 sudo tlp ac
-echo "Performance mode activated with Turbo Boost enabled"
+echo "Performance mode activated"
 
-# Verify settings
-echo -e "\nVerifying settings:"
-echo "Turbo Boost: $([[ $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) == 0 ]] && echo "Enabled" || echo "Disabled")"
-echo "Max Performance: $(cat /sys/devices/system/cpu/intel_pstate/max_perf_pct)%"
+# Show current settings
+echo -e "\nCurrent settings:"
 echo "Governor: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor)"
+echo "Min Freq: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq) KHz"
+echo "Max Freq: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq) KHz"
+echo "Current Freq: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq) KHz"
 EOF
 
-# Create a script to switch to balanced mode
+# Create balanced mode script
 sudo tee /usr/local/bin/tlp-balanced << 'EOF'
 #!/bin/bash
 echo "Switching to balanced mode..."
 
-# Set Intel P-state parameters
-echo 0 | sudo tee /sys/devices/system/cpu/intel_pstate/no_turbo
-echo 80 | sudo tee /sys/devices/system/cpu/intel_pstate/max_perf_pct
-echo 20 | sudo tee /sys/devices/system/cpu/intel_pstate/min_perf_pct
+# Set CPU frequency limits
+for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
+    echo 400000 | sudo tee $cpu/cpufreq/scaling_min_freq
+    echo 3400000 | sudo tee $cpu/cpufreq/scaling_max_freq
+done
 
-# Intel-specific balanced settings
+# Enable Turbo Boost
+echo 0 | sudo tee /sys/devices/system/cpu/intel_pstate/no_turbo
+
+# Update TLP settings
 sudo sed -i 's/^CPU_HWP_ON_AC=.*/CPU_HWP_ON_AC=balance_performance/' /etc/tlp.d/99-custom-settings.conf
 sudo sed -i 's/^CPU_ENERGY_PERF_POLICY_ON_AC=.*/CPU_ENERGY_PERF_POLICY_ON_AC=balance_performance/' /etc/tlp.d/99-custom-settings.conf
-sudo sed -i 's/^CPU_BOOST_ON_AC=.*/CPU_BOOST_ON_AC=1/' /etc/tlp.d/99-custom-settings.conf
-sudo sed -i 's/^CPU_SCALING_GOVERNOR_ON_AC=.*/CPU_SCALING_GOVERNOR_ON_AC=performance/' /etc/tlp.d/99-custom-settings.conf
-
-# Common TLP balanced settings
 sudo sed -i 's/^PLATFORM_PROFILE_ON_AC=.*/PLATFORM_PROFILE_ON_AC=balanced/' /etc/tlp.d/99-custom-settings.conf
-sudo sed -i 's/^CPU_MAX_PERF_ON_AC=.*/CPU_MAX_PERF_ON_AC=80/' /etc/tlp.d/99-custom-settings.conf
 
 sudo tlp ac
-echo "Balanced mode activated with balanced boost"
+echo "Balanced mode activated"
 
-# Verify settings
-echo -e "\nVerifying settings:"
-echo "Turbo Boost: $([[ $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) == 0 ]] && echo "Enabled" || echo "Disabled")"
-echo "Max Performance: $(cat /sys/devices/system/cpu/intel_pstate/max_perf_pct)%"
+# Show current settings
+echo -e "\nCurrent settings:"
 echo "Governor: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor)"
+echo "Min Freq: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq) KHz"
+echo "Max Freq: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq) KHz"
+echo "Current Freq: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq) KHz"
 EOF
 
-# Create a script to switch to battery mode
+# Create battery mode script
 sudo tee /usr/local/bin/tlp-battery << 'EOF'
 #!/bin/bash
-echo "Switching to optimized battery mode..."
+echo "Switching to battery mode..."
 
-# Set Intel P-state parameters
+# Set CPU frequency limits
+for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
+    echo 400000 | sudo tee $cpu/cpufreq/scaling_min_freq
+    echo 2800000 | sudo tee $cpu/cpufreq/scaling_max_freq
+done
+
+# Enable Turbo Boost but let TLP manage it
 echo 0 | sudo tee /sys/devices/system/cpu/intel_pstate/no_turbo
-echo 80 | sudo tee /sys/devices/system/cpu/intel_pstate/max_perf_pct
-echo 20 | sudo tee /sys/devices/system/cpu/intel_pstate/min_perf_pct
 
-# Intel-specific balanced battery settings
-sudo sed -i 's/^CPU_HWP_ON_BAT=.*/CPU_HWP_ON_BAT=balance_performance/' /etc/tlp.d/99-custom-settings.conf
-sudo sed -i 's/^CPU_ENERGY_PERF_POLICY_ON_BAT=.*/CPU_ENERGY_PERF_POLICY_ON_BAT=balance_performance/' /etc/tlp.d/99-custom-settings.conf
-sudo sed -i 's/^CPU_BOOST_ON_BAT=.*/CPU_BOOST_ON_BAT=1/' /etc/tlp.d/99-custom-settings.conf
-sudo sed -i 's/^CPU_SCALING_GOVERNOR_ON_BAT=.*/CPU_SCALING_GOVERNOR_ON_BAT=powersave/' /etc/tlp.d/99-custom-settings.conf
-
-# Common TLP balanced battery settings
+# Update TLP settings
+sudo sed -i 's/^CPU_HWP_ON_BAT=.*/CPU_HWP_ON_BAT=balance_power/' /etc/tlp.d/99-custom-settings.conf
+sudo sed -i 's/^CPU_ENERGY_PERF_POLICY_ON_BAT=.*/CPU_ENERGY_PERF_POLICY_ON_BAT=balance_power/' /etc/tlp.d/99-custom-settings.conf
 sudo sed -i 's/^PLATFORM_PROFILE_ON_BAT=.*/PLATFORM_PROFILE_ON_BAT=balanced/' /etc/tlp.d/99-custom-settings.conf
-sudo sed -i 's/^CPU_MAX_PERF_ON_BAT=.*/CPU_MAX_PERF_ON_BAT=80/' /etc/tlp.d/99-custom-settings.conf
 
 sudo tlp bat
-echo "Battery mode activated with optimized performance settings"
+echo "Battery mode activated"
 
-# Verify settings
-echo -e "\nVerifying settings:"
-echo "Turbo Boost: $([[ $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) == 0 ]] && echo "Enabled" || echo "Disabled")"
-echo "Max Performance: $(cat /sys/devices/system/cpu/intel_pstate/max_perf_pct)%"
+# Show current settings
+echo -e "\nCurrent settings:"
 echo "Governor: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor)"
+echo "Min Freq: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq) KHz"
+echo "Max Freq: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq) KHz"
+echo "Current Freq: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq) KHz"
 EOF
 
-# Create an enhanced status script
+# Create status script
 sudo tee /usr/local/bin/tlp-status << 'EOF'
 #!/bin/bash
 echo "=== TLP Status ==="
@@ -153,7 +210,9 @@ echo "Current frequency: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_
 echo "Max frequency: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq) KHz"
 echo "Min frequency: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq) KHz"
 echo "Turbo Boost: $([[ $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) == 0 ]] && echo "Enabled" || echo "Disabled")"
-echo "Max Performance: $(cat /sys/devices/system/cpu/intel_pstate/max_perf_pct)%"
+
+echo -e "\n=== Throttling Status ==="
+sudo rdmsr -f 29:24 -d 0x1a2
 
 echo -e "\n=== Power Profiles ==="
 echo "AC Profile: $(grep PLATFORM_PROFILE_ON_AC /etc/tlp.d/99-custom-settings.conf)"
@@ -161,16 +220,9 @@ echo "Battery Profile: $(grep PLATFORM_PROFILE_ON_BAT /etc/tlp.d/99-custom-setti
 
 echo -e "\n=== Current Settings ==="
 echo "Power Source: $(cat /sys/class/power_supply/AC/online | grep -q "1" && echo "AC" || echo "Battery")"
-echo "Performance Mode: $(grep "CPU_MAX_PERF_ON_AC" /etc/tlp.d/99-custom-settings.conf)"
-
-echo -e "\n=== Intel-specific Settings ==="
-echo "HWP Setting: $(grep CPU_HWP_ON_AC /etc/tlp.d/99-custom-settings.conf)"
-echo "Energy Performance: $(grep CPU_ENERGY_PERF_POLICY_ON_AC /etc/tlp.d/99-custom-settings.conf)"
-echo "GPU Frequencies: $(grep INTEL_GPU_MAX_FREQ_ON_AC /etc/tlp.d/99-custom-settings.conf)"
 
 echo -e "\n=== Thermal Information ==="
 echo "CPU Temperature: $(sensors | grep 'Package id 0:' | cut -d '+' -f2 | cut -d ' ' -f1)"
-echo "Fan Speed: $(cat /proc/acpi/ibm/fan | grep 'speed:' | awk '{print $2}') RPM"
 
 echo -e "\n=== Battery Health ==="
 echo "Battery Cycle Count: $(cat /sys/class/power_supply/BAT0/cycle_count)"
@@ -179,14 +231,18 @@ echo "Design Capacity: $(cat /sys/class/power_supply/BAT0/energy_full_design)mWh
 echo "Current Capacity: $(cat /sys/class/power_supply/BAT0/energy_full)mWh"
 EOF
 
-# Make all scripts executable
+# Make scripts executable
 sudo chmod +x /usr/local/bin/tlp-performance
 sudo chmod +x /usr/local/bin/tlp-balanced
 sudo chmod +x /usr/local/bin/tlp-battery
 sudo chmod +x /usr/local/bin/tlp-status
 
+# Enable and start services
+sudo systemctl enable --now lenovo_fix.service
+sudo tlp start
+
 echo "Installation complete. You can now use:"
-echo "sudo tlp-performance - for maximum performance (high heat/fan)"
-echo "sudo tlp-balanced   - for balanced performance and heat"
-echo "sudo tlp-battery    - for optimized battery life"
+echo "sudo tlp-performance - for maximum performance (up to 4.0GHz)"
+echo "sudo tlp-balanced   - for balanced operation (up to 3.4GHz)"
+echo "sudo tlp-battery    - for optimized battery life (up to 2.8GHz)"
 echo "tlp-status         - to check current settings"
